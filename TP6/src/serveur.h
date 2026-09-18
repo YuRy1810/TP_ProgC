@@ -5,8 +5,8 @@
  *
  */
 
-#ifndef __SERVER_H__
-#define __SERVER_H__
+#ifndef SERVEUR_H
+#define SERVEUR_H
 
 #define PORT 8089
 
@@ -15,7 +15,7 @@
  * en retour
  */
 
-const char *svg_file_path = "pie_chart.svg";
+extern const char *svg_file_path;
 
 int recois_envoie_message(int, char[1024]);
 

@@ -5,8 +5,10 @@
  *
  */
 
-#ifndef __CLIENT_H__
-#define __CLIENT_H__
+#ifndef CLIENT_H
+#define CLIENT_H
+
+#include <stddef.h>
 
 /*
  * port d'ordinateur pour envoyer et recevoir des messages
@@ -18,5 +20,6 @@
  * Il faut un argument : l'identifiant de la socket
  */
 int envoie_recois_message(int socketfd);
+int envoie_couleurs(int socketfd, const char *pathname, size_t nombre);
 
 #endif

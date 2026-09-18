@@ -5,8 +5,8 @@
  *
  */
 
-#ifndef __SERVER_H__
-#define __SERVER_H__
+#ifndef SERVEUR_H
+#define SERVEUR_H
 
 #define PORT 8089
 
@@ -15,5 +15,6 @@
  * en retour
  */
 int renvoie_message(int, char *);
+int recois_numeros_calcule(int client_socket_fd, const char *data);
 
 #endif

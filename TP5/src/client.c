@@ -5,6 +5,9 @@
  *
  */
 
+#include <arpa/inet.h>
+#include <errno.h>
+#include <signal.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,82 +24,87 @@
  * @param socketfd Le descripteur de la socket utilisée pour la communication.
  * @return 0 en cas de succès, -1 en cas d'erreur.
  */
-int envoie_recois_message(int socketfd)
+static int envoyer_ligne(int socketfd, const char *message)
 {
-  char data[1024];
+    size_t longueur = strlen(message);
+    char reponse[1024];
+    ssize_t lus;
 
-  // Réinitialisation de l'ensemble des données
-  memset(data, 0, sizeof(data));
-
-  // Demande à l'utilisateur d'entrer un message
-  char message[1024];
-  printf("Votre message (max 1000 caractères): ");
-  fgets(message, sizeof(message), stdin);
-
-  // Construit le message avec une étiquette "message: "
-  strcpy(data, "message: ");
-  strcat(data, message);
-
-  // Envoie le message au client
-  int write_status = write(socketfd, data, strlen(data));
-  if (write_status < 0)
-  {
-    perror("Erreur d'écriture");
-    return -1;
-  }
-
-  // Réinitialisation de l'ensemble des données
-  memset(data, 0, sizeof(data));
-
-  // Lit les données de la socket
-  int read_status = read(socketfd, data, sizeof(data));
-  if (read_status < 0)
-  {
-    perror("Erreur de lecture");
-    return -1;
-  }
-
-  // Affiche le message reçu du client
-  printf("Message reçu: %s\n", data);
-
-  return 0; // Succès
+    if (write(socketfd, message, longueur) != (ssize_t)longueur ||
+        write(socketfd, "\n", 1) != 1) {
+        perror("Erreur d'ecriture");
+        return -1;
+    }
+    lus = read(socketfd, reponse, sizeof reponse - 1);
+    if (lus <= 0) {
+        if (lus < 0) perror("Erreur de lecture");
+        return -1;
+    }
+    reponse[lus] = '\0';
+    printf("Message recu : %s", reponse);
+    if (reponse[lus - 1] != '\n') putchar('\n');
+    return 0;
 }
 
-int main()
+int envoie_recois_message(int socketfd)
 {
-  int socketfd;
+    char message[1024];
 
-  struct sockaddr_in server_addr;
+    printf("Votre message (max 1000 caracteres, 'quit' pour sortir) : ");
+    if (fgets(message, sizeof message, stdin) == NULL) return -1;
+    message[strcspn(message, "\n")] = '\0';
+    if (strcmp(message, "quit") == 0) return 1;
+    char data[1024];
+    snprintf(data, sizeof data, "message: %.1014s", message);
+    return envoyer_ligne(socketfd, data);
+}
 
-  /*
-   * Creation d'une socket
-   */
-  socketfd = socket(AF_INET, SOCK_STREAM, 0);
-  if (socketfd < 0)
-  {
-    perror("socket");
-    exit(EXIT_FAILURE);
-  }
+int envoie_operateur_numeros(int socketfd, char operateur,
+                             double premier, double deuxieme)
+{
+    char message[128];
+    snprintf(message, sizeof message, "calcule : %c %.17g %.17g",
+             operateur, premier, deuxieme);
+    return envoyer_ligne(socketfd, message);
+}
 
-  // détails du serveur (adresse et port)
-  memset(&server_addr, 0, sizeof(server_addr));
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons(PORT);
-  server_addr.sin_addr.s_addr = INADDR_ANY;
+int main(void)
+{
+    int socketfd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in server_addr;
 
-  // demande de connection au serveur
-  int connect_status = connect(socketfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-  if (connect_status < 0)
-  {
-    perror("connection serveur");
-    exit(EXIT_FAILURE);
-  }
+    if (socketfd < 0) { perror("socket"); return 1; }
+    signal(SIGPIPE, SIG_IGN);
+    memset(&server_addr, 0, sizeof server_addr);
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    server_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(socketfd, (struct sockaddr *)&server_addr, sizeof server_addr) < 0) {
+        perror("connexion serveur");
+        close(socketfd);
+        return 1;
+    }
 
-  while (1)
-  {
-    // appeler la fonction pour envoyer un message au serveur
-    envoie_recois_message(socketfd);
-  }
-
-  close(socketfd);
+    for (;;) {
+        char choix[32];
+        printf("Commande (message/calcul/quit) : ");
+        if (fgets(choix, sizeof choix, stdin) == NULL ||
+            strncmp(choix, "quit", 4) == 0) break;
+        if (strncmp(choix, "calcul", 6) == 0) {
+            char operateur;
+            double premier;
+            double deuxieme = 0;
+            printf("Calcul (operateur nombre1 nombre2) : ");
+            if (scanf(" %c %lf %lf", &operateur, &premier, &deuxieme) != 3) {
+                fprintf(stderr, "Calcul invalide.\n");
+                break;
+            }
+            while (getchar() != '\n') {}
+            if (envoie_operateur_numeros(socketfd, operateur, premier, deuxieme) < 0) break;
+        } else if (envoie_recois_message(socketfd) < 0) {
+            break;
+        }
+    }
+    close(socketfd);
+    return 0;
 }
